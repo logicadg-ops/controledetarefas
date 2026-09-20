@@ -1,0 +1,2 @@
+# Normaliza quebras de linha (evita avisos LF/CRLF no Windows)
+* text=auto

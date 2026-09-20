@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Painel de Tarefas usa tema claro fixo (ferramenta interna de uso em
+ * horário comercial). Suporte a modo escuro fica como próximo passo — ver
+ * CLAUDE_PROMPT.md.
+ */
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

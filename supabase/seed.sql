@@ -1,0 +1,6 @@
+-- ============================================================================
+-- Seed vazio.
+-- O sistema é multiempresa (migration 0008): todo registro exige uma empresa,
+-- e os dados de exemplo antigos foram removidos. Crie a primeira empresa e o
+-- administrador manualmente (ou pela tela "Empresas") após um "db reset".
+-- ============================================================================
