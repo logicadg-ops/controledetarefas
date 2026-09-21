@@ -102,3 +102,19 @@ export async function atualizarStatus(id: string, status: StatusTarefa) {
   revalidatePath('/tarefas')
   revalidatePath('/dashboard')
 }
+
+// Exclusão só para administradores e só de tarefas ainda não concluídas.
+// A regra é aplicada no banco (excluir_tarefa); tarefas de recorrência ficam
+// registradas como "puladas" para a rotina diária não recriá-las no período.
+export async function excluirTarefa(id: string) {
+  'use server'
+  const usuario = await getUsuarioLogado()
+  if (usuario?.role !== 'admin') throw new Error('Apenas administradores podem excluir tarefas.')
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('excluir_tarefa', { p_id: id })
+  if (error) throw new Error(error.message)
+
+  revalidatePath('/tarefas')
+  revalidatePath('/dashboard')
+}

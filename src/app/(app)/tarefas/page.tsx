@@ -14,7 +14,8 @@ import {
   passouDaMeta,
   tempoExecucaoMs,
 } from '@/lib/utils'
-import { atualizarStatus } from './actions'
+import { atualizarStatus, excluirTarefa } from './actions'
+import { BotaoExcluirTarefa } from './botao-excluir-tarefa'
 import { LinhaTarefa, type DetalhesTarefa } from './linha-tarefa'
 
 export const dynamic = 'force-dynamic'
@@ -369,6 +370,13 @@ export default async function TarefasPage({
                             Reabrir
                           </button>
                         </form>
+                      )}
+                      {isAdmin && t.status !== 'concluida' && (
+                        <BotaoExcluirTarefa
+                          action={excluirTarefa.bind(null, t.id)}
+                          titulo={t.titulo}
+                          recorrente={t.recorrente_id !== null}
+                        />
                       )}
                     </div>
                   </td>
