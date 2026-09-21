@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { AtualizacaoAutomatica } from '../atualizacao-automatica'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuarioLogado } from '@/lib/data'
 import type { Cliente, Tarefa, Setor, Usuario } from '@/lib/types'
@@ -182,8 +183,9 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">
+          <h1 className="flex items-baseline gap-3 text-lg font-semibold text-slate-900">
             Olá, {usuario?.nome?.split(' ')[0] ?? ''}
+            <AtualizacaoAutomatica intervaloSegundos={30} />
           </h1>
           <p className="text-sm text-slate-500">
             {usuario?.role === 'admin'

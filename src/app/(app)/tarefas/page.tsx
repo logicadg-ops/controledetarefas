@@ -14,6 +14,7 @@ import {
   passouDaMeta,
   tempoExecucaoMs,
 } from '@/lib/utils'
+import { AtualizacaoAutomatica } from '../atualizacao-automatica'
 import { atualizarStatus, excluirTarefa } from './actions'
 import { BotaoExcluirTarefa } from './botao-excluir-tarefa'
 import { LinhaTarefa, type DetalhesTarefa } from './linha-tarefa'
@@ -173,7 +174,10 @@ export default async function TarefasPage({
     // centralizada e limitada à largura da tela.
     <div className="relative left-1/2 w-[max(100%,min(86.4rem,calc(100vw_-_3rem)))] -translate-x-1/2 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-slate-900">Tarefas</h1>
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-lg font-semibold text-slate-900">Tarefas</h1>
+          <AtualizacaoAutomatica intervaloSegundos={20} />
+        </div>
         <Link
           href="/tarefas/nova"
           className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
