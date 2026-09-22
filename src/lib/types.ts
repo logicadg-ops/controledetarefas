@@ -97,6 +97,18 @@ export interface Tarefa {
   exemplo: boolean
 }
 
+export interface TarefaAnexo {
+  id: string
+  empresa_id: string
+  tarefa_id: string
+  nome_arquivo: string
+  caminho: string
+  tamanho_bytes: number
+  tipo_mime: string | null
+  enviado_por: string | null
+  created_at: string
+}
+
 export interface ConfigGeral {
   empresa_id: string
   webhook_url: string

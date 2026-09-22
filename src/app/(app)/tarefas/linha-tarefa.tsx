@@ -1,15 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { anexarArquivos, excluirAnexo } from './actions'
+
+export interface DetalheAnexo {
+  id: string
+  nome: string
+  tamanho: string
+  enviadoPor: string
+  enviadoEm: string
+  podeExcluir: boolean
+}
 
 export interface DetalhesTarefa {
+  tarefaId: string
   titulo: string
   descricao: string
   status: { label: string; color: string }
   prioridade: { label: string; color: string }
   atrasada: boolean
   campos: { label: string; value: string }[]
+  anexos: DetalheAnexo[]
+  podeAnexar: boolean
 }
 
 export function LinhaTarefa({
@@ -102,10 +115,96 @@ export function LinhaTarefa({
                   </div>
                 ))}
               </dl>
+
+              <SecaoAnexos
+                tarefaId={detalhes.tarefaId}
+                anexos={detalhes.anexos}
+                podeAnexar={detalhes.podeAnexar}
+              />
             </div>
           </div>,
           document.body
         )}
     </>
+  )
+}
+
+function SecaoAnexos({
+  tarefaId,
+  anexos,
+  podeAnexar,
+}: {
+  tarefaId: string
+  anexos: DetalheAnexo[]
+  podeAnexar: boolean
+}) {
+  const formRef = useRef<HTMLFormElement>(null)
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <h3 className="text-sm font-medium text-slate-900">Documentos</h3>
+
+      {anexos.length === 0 ? (
+        <p className="mt-2 text-sm text-slate-400">Nenhum documento anexado.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100 text-sm">
+          {anexos.map((a) => (
+            <li key={a.id} className="flex items-center justify-between gap-2 py-2">
+              <div className="min-w-0">
+                <a
+                  href={`/api/anexos/${a.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block truncate font-medium text-slate-700 hover:underline"
+                  title={a.nome}
+                >
+                  {a.nome}
+                </a>
+                <p className="text-xs text-slate-400">
+                  {a.tamanho} · enviado por {a.enviadoPor} em {a.enviadoEm}
+                </p>
+              </div>
+              {a.podeExcluir && (
+                <form
+                  action={excluirAnexo.bind(null, a.id)}
+                  onSubmit={(e) => {
+                    if (!confirm(`Excluir o documento "${a.nome}"?`)) e.preventDefault()
+                  }}
+                >
+                  <button className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                    Excluir
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {podeAnexar && (
+        <form
+          ref={formRef}
+          action={async (formData) => {
+            await anexarArquivos(tarefaId, formData)
+            formRef.current?.reset()
+          }}
+          className="mt-3 flex flex-wrap items-center gap-2"
+        >
+          <input
+            type="file"
+            name="arquivos"
+            multiple
+            required
+            className="flex-1 text-xs text-slate-600 file:mr-2 file:rounded-lg file:border file:border-slate-300 file:bg-white file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-50"
+          />
+          <button className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800">
+            Anexar
+          </button>
+          <p className="w-full text-[11px] text-slate-400">
+            Até 20 MB por arquivo. PDF, imagens, Word, Excel, texto ou ZIP.
+          </p>
+        </form>
+      )}
+    </div>
   )
 }

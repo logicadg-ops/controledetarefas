@@ -74,6 +74,19 @@ export function tempoExecucaoMs(t: Pick<Tarefa, 'data_inicio' | 'data_conclusao'
   return new Date(t.data_conclusao).getTime() - new Date(t.data_inicio).getTime()
 }
 
+/** Formata bytes como "12 KB", "3,4 MB" etc. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const unidades = ['KB', 'MB', 'GB']
+  let valor = bytes / 1024
+  let i = 0
+  while (valor >= 1024 && i < unidades.length - 1) {
+    valor /= 1024
+    i++
+  }
+  return `${valor.toFixed(valor < 10 ? 1 : 0).replace('.', ',')} ${unidades[i]}`
+}
+
 /** Formata uma duração em milissegundos como "Xh Ymin", "Xmin" ou "Xd Yh". */
 export function formatDuracao(ms: number): string {
   const minutos = Math.round(ms / 60000)

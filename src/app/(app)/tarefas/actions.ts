@@ -1,10 +1,13 @@
 'use server'
 
+import { randomUUID } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuarioLogado } from '@/lib/data'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { ResponsavelTipo, StatusTarefa } from '@/lib/types'
+
+const BUCKET_ANEXOS = 'tarefa-anexos'
 
 export async function criarTarefa(formData: FormData) {
   const supabase = await createClient()
@@ -117,4 +120,78 @@ export async function excluirTarefa(id: string) {
 
   revalidatePath('/tarefas')
   revalidatePath('/dashboard')
+}
+
+// Anexar documentos: só enquanto a tarefa está pendente ou em andamento (a
+// permissão de quem pode fazer isso é validada de novo no banco, tanto na
+// tabela tarefa_anexos quanto no bucket de Storage).
+export async function anexarArquivos(tarefaId: string, formData: FormData) {
+  'use server'
+  const usuario = await getUsuarioLogado()
+  if (!usuario) redirect('/login?erro=Sua+sess%C3%A3o+expirou.+Entre+novamente.')
+
+  const arquivos = formData.getAll('arquivos').filter((f): f is File => f instanceof File && f.size > 0)
+  if (arquivos.length === 0) {
+    redirect('/tarefas?erro=Selecione+ao+menos+um+arquivo.')
+  }
+
+  const supabase = await createClient()
+
+  for (const arquivo of arquivos) {
+    const ponto = arquivo.name.lastIndexOf('.')
+    const extensao = ponto >= 0 ? arquivo.name.slice(ponto) : ''
+    const caminho = `${tarefaId}/${randomUUID()}${extensao}`
+
+    const { error: uploadError } = await supabase.storage
+      .from(BUCKET_ANEXOS)
+      .upload(caminho, arquivo, { contentType: arquivo.type || 'application/octet-stream' })
+
+    if (uploadError) {
+      redirect(`/tarefas?erro=${encodeURIComponent(`Falha ao enviar "${arquivo.name}": ${uploadError.message}`)}`)
+    }
+
+    const { error: dbError } = await supabase.from('tarefa_anexos').insert({
+      tarefa_id: tarefaId,
+      nome_arquivo: arquivo.name,
+      caminho,
+      tamanho_bytes: arquivo.size,
+      tipo_mime: arquivo.type || null,
+    })
+
+    if (dbError) {
+      // Desfaz o upload para não deixar um arquivo órfão no Storage.
+      await supabase.storage.from(BUCKET_ANEXOS).remove([caminho])
+      redirect(`/tarefas?erro=${encodeURIComponent(dbError.message)}`)
+    }
+  }
+
+  revalidatePath('/tarefas')
+}
+
+// Exclusão de anexo: admin ou quem enviou, e só enquanto a tarefa não foi
+// concluída (regra aplicada no banco, tanto na tabela quanto no Storage).
+// O arquivo é removido do Storage antes da linha de metadados, porque a
+// policy de exclusão do Storage depende dessa linha existir.
+export async function excluirAnexo(anexoId: string) {
+  'use server'
+  const usuario = await getUsuarioLogado()
+  if (!usuario) redirect('/login?erro=Sua+sess%C3%A3o+expirou.+Entre+novamente.')
+
+  const supabase = await createClient()
+  const { data: anexo } = await supabase.from('tarefa_anexos').select('caminho').eq('id', anexoId).maybeSingle()
+  if (!anexo) {
+    redirect('/tarefas?erro=Anexo+n%C3%A3o+encontrado+ou+sem+permiss%C3%A3o.')
+  }
+
+  const { error: storageError } = await supabase.storage.from(BUCKET_ANEXOS).remove([anexo.caminho])
+  if (storageError) {
+    redirect(`/tarefas?erro=${encodeURIComponent(storageError.message)}`)
+  }
+
+  const { error: dbError } = await supabase.from('tarefa_anexos').delete().eq('id', anexoId)
+  if (dbError) {
+    redirect(`/tarefas?erro=${encodeURIComponent(dbError.message)}`)
+  }
+
+  revalidatePath('/tarefas')
 }

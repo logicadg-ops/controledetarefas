@@ -1,13 +1,14 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { getUsuarioLogado } from '@/lib/data'
-import type { Cliente, Prioridade, Setor, Tarefa, Usuario } from '@/lib/types'
+import type { Cliente, Prioridade, Setor, Tarefa, TarefaAnexo, Usuario } from '@/lib/types'
 import {
   PRIORIDADE_COLOR,
   PRIORIDADE_LABEL,
   STATUS_COLOR,
   STATUS_LABEL,
   cn,
+  formatBytes,
   formatDateTime,
   formatDuracao,
   isAtrasada,
@@ -67,6 +68,25 @@ export default async function TarefasPage({
     clientes: { nome: string } | null
   })[]
 
+  // Anexos de todas as tarefas listadas (a RLS de tarefa_anexos já restringe
+  // ao que esta pessoa pode ver, então não precisa refiltrar aqui).
+  const tarefaIds = tarefas.map((t) => t.id)
+  const { data: anexosData } =
+    tarefaIds.length > 0
+      ? await supabase
+          .from('tarefa_anexos')
+          .select('*')
+          .in('tarefa_id', tarefaIds)
+          .order('created_at', { ascending: true })
+      : { data: [] as TarefaAnexo[] }
+  const anexosPorTarefa = new Map<string, TarefaAnexo[]>()
+  for (const a of (anexosData ?? []) as TarefaAnexo[]) {
+    const lista = anexosPorTarefa.get(a.tarefa_id) ?? []
+    lista.push(a)
+    anexosPorTarefa.set(a.tarefa_id, lista)
+  }
+  const nomeDoUsuario = new Map(usuarios.map((x) => [x.id, x.nome] as const))
+
   // Usuário comum só enxerga o que é dele ou do setor dele (RLS); as opções de
   // cliente e setor também ficam limitadas a esse universo.
   if (!isAdmin) {
@@ -110,12 +130,27 @@ export default async function TarefasPage({
   const detalhesDe = (t: (typeof tarefas)[number]): DetalhesTarefa => {
     const ms = tempoExecucaoMs(t)
     const concluida = t.status === 'concluida'
+    const podeAgirNaTarefa =
+      isAdmin ||
+      (t.responsavel_tipo === 'usuario' && t.responsavel_id === usuario?.id) ||
+      (t.responsavel_tipo === 'setor' && t.setor_id === usuario?.setor_id)
+    const anexos = (anexosPorTarefa.get(t.id) ?? []).map((a) => ({
+      id: a.id,
+      nome: a.nome_arquivo,
+      tamanho: formatBytes(a.tamanho_bytes),
+      enviadoPor: (a.enviado_por && nomeDoUsuario.get(a.enviado_por)) ?? 'alguém que não está mais ativo',
+      enviadoEm: formatDateTime(a.created_at),
+      podeExcluir: t.status !== 'concluida' && (isAdmin || a.enviado_por === usuario?.id),
+    }))
     return {
+      tarefaId: t.id,
       titulo: t.titulo,
       descricao: t.descricao,
       status: { label: STATUS_LABEL[t.status], color: STATUS_COLOR[t.status] },
       prioridade: { label: PRIORIDADE_LABEL[t.prioridade], color: PRIORIDADE_COLOR[t.prioridade] },
       atrasada: isAtrasada(t),
+      anexos,
+      podeAnexar: podeAgirNaTarefa && (t.status === 'pendente' || t.status === 'andamento'),
       campos: [
         { label: 'Tipo', value: t.tipo === 'recorrente' ? 'Recorrente' : 'Avulsa' },
         { label: 'Cliente', value: t.clientes?.nome ?? '—' },
