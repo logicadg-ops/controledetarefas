@@ -334,7 +334,18 @@ export default async function TarefasPage({
               {tarefas.map((t) => (
                 <LinhaTarefa key={t.id} detalhes={detalhesDe(t)} className={isAtrasada(t) ? 'bg-red-50/40' : undefined}>
                   <td className="min-w-[10rem] px-4 py-2.5">
-                    <p className="font-medium text-slate-900">{t.titulo}</p>
+                    <p className="flex items-center gap-1.5 font-medium text-slate-900">
+                      {t.titulo}
+                      {(anexosPorTarefa.get(t.id)?.length ?? 0) > 0 && (
+                        <span
+                          className="text-slate-400"
+                          title={`${anexosPorTarefa.get(t.id)!.length} documento(s) anexado(s)`}
+                          aria-label="Tem documento anexado"
+                        >
+                          📎
+                        </span>
+                      )}
+                    </p>
                     {t.descricao && <p className="text-xs text-slate-400">{t.descricao}</p>}
                   </td>
                   <td className="px-4 py-2.5 text-slate-600">{t.clientes?.nome ?? '—'}</td>
