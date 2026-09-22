@@ -338,8 +338,8 @@ export default async function TarefasPage({
                       {t.titulo}
                       {(anexosPorTarefa.get(t.id)?.length ?? 0) > 0 && (
                         <span
-                          className="text-slate-400"
-                          style={{ fontSize: '1.3em' }}
+                          className="inline-flex items-center text-slate-400"
+                          style={{ fontSize: '1.3em', lineHeight: 1 }}
                           title={`${anexosPorTarefa.get(t.id)!.length} documento(s) anexado(s)`}
                           aria-label="Tem documento anexado"
                         >
