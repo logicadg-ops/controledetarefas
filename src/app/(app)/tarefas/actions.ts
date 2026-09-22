@@ -195,3 +195,26 @@ export async function excluirAnexo(anexoId: string) {
 
   revalidatePath('/tarefas')
 }
+
+// Devolutiva: explicação livre sobre o andamento/conclusão da tarefa.
+// Sem policy nova — a permissão é a mesma de tarefas_update (admin, o
+// responsável, ou alguém do setor responsável).
+export async function salvarDevolutiva(tarefaId: string, formData: FormData) {
+  'use server'
+  const usuario = await getUsuarioLogado()
+  if (!usuario) redirect('/login?erro=Sua+sess%C3%A3o+expirou.+Entre+novamente.')
+
+  const devolutiva = String(formData.get('devolutiva') || '').trim()
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('tarefas')
+    .update({ devolutiva: devolutiva || null })
+    .eq('id', tarefaId)
+
+  if (error) {
+    redirect(`/tarefas?erro=${encodeURIComponent(error.message)}`)
+  }
+
+  revalidatePath('/tarefas')
+}

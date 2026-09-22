@@ -92,6 +92,7 @@ export interface Tarefa {
   data_conclusao: string | null
   no_prazo: boolean | null
   no_meta: boolean | null
+  devolutiva: string | null
   criado_por: string | null
   concluido_por: string | null
   exemplo: boolean

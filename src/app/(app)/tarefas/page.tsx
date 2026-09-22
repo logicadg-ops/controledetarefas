@@ -151,6 +151,8 @@ export default async function TarefasPage({
       atrasada: isAtrasada(t),
       anexos,
       podeAnexar: podeAgirNaTarefa && (t.status === 'pendente' || t.status === 'andamento'),
+      devolutiva: t.devolutiva,
+      podeEditarDevolutiva: podeAgirNaTarefa,
       campos: [
         { label: 'Tipo', value: t.tipo === 'recorrente' ? 'Recorrente' : 'Avulsa' },
         { label: 'Cliente', value: t.clientes?.nome ?? '—' },

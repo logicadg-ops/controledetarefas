@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { anexarArquivos, excluirAnexo } from './actions'
+import { anexarArquivos, excluirAnexo, salvarDevolutiva } from './actions'
 
 export interface DetalheAnexo {
   id: string
@@ -23,6 +23,8 @@ export interface DetalhesTarefa {
   campos: { label: string; value: string }[]
   anexos: DetalheAnexo[]
   podeAnexar: boolean
+  devolutiva: string | null
+  podeEditarDevolutiva: boolean
 }
 
 export function LinhaTarefa({
@@ -116,6 +118,12 @@ export function LinhaTarefa({
                 ))}
               </dl>
 
+              <SecaoDevolutiva
+                tarefaId={detalhes.tarefaId}
+                devolutiva={detalhes.devolutiva}
+                podeEditar={detalhes.podeEditarDevolutiva}
+              />
+
               <SecaoAnexos
                 tarefaId={detalhes.tarefaId}
                 anexos={detalhes.anexos}
@@ -126,6 +134,45 @@ export function LinhaTarefa({
           document.body
         )}
     </>
+  )
+}
+
+function SecaoDevolutiva({
+  tarefaId,
+  devolutiva,
+  podeEditar,
+}: {
+  tarefaId: string
+  devolutiva: string | null
+  podeEditar: boolean
+}) {
+  if (!podeEditar && !devolutiva) return null
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <h3 className="text-sm font-medium text-slate-900">Devolutiva</h3>
+      <p className="mt-0.5 text-xs text-slate-400">
+        Explicação extra sobre o andamento ou a conclusão da tarefa (opcional).
+      </p>
+
+      {podeEditar ? (
+        <form action={salvarDevolutiva.bind(null, tarefaId)} className="mt-2 space-y-2">
+          <textarea
+            key={devolutiva ?? ''}
+            name="devolutiva"
+            defaultValue={devolutiva ?? ''}
+            rows={3}
+            placeholder="Ex.: concluído com atraso porque o cliente enviou os documentos fora do prazo…"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+          />
+          <button className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800">
+            Salvar devolutiva
+          </button>
+        </form>
+      ) : (
+        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{devolutiva}</p>
+      )}
+    </div>
   )
 }
 
