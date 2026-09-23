@@ -70,7 +70,7 @@ export function LinhaTarefa({
             aria-label={`Detalhes da tarefa ${detalhes.titulo}`}
           >
             <div
-              className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+              className="max-h-[95vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-4">
