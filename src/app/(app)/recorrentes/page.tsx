@@ -6,6 +6,7 @@ import type { Cliente, Recorrente, Setor, Usuario } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { alternarRecorrente, criarRecorrente, excluirRecorrente } from './actions'
 import { BotaoExcluir } from './botao-excluir'
+import { ImportarPlanilha } from './importar-planilha'
 import { RecorrenteForm } from './recorrente-form'
 
 export const dynamic = 'force-dynamic'
@@ -13,9 +14,9 @@ export const dynamic = 'force-dynamic'
 export default async function RecorrentesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; cliente?: string }>
+  searchParams: Promise<{ erro?: string; aviso?: string; cliente?: string }>
 }) {
-  const { erro, cliente: filtroCliente } = await searchParams
+  const { erro, aviso, cliente: filtroCliente } = await searchParams
   const usuario = await getUsuarioLogado()
   if (usuario?.role !== 'admin') redirect('/dashboard')
 
@@ -60,6 +61,7 @@ export default async function RecorrentesPage({
       </div>
 
       {erro && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</div>}
+      {aviso && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{aviso}</div>}
 
       <RecorrenteForm
         action={criarRecorrente}
@@ -68,6 +70,8 @@ export default async function RecorrentesPage({
         clientes={clientes}
         submitLabel="Criar recorrência"
       />
+
+      <ImportarPlanilha />
 
       <form action="/recorrentes" className="flex flex-wrap items-center gap-2">
         <select
