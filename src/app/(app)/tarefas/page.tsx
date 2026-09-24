@@ -19,6 +19,7 @@ import { AtualizacaoAutomatica } from '../atualizacao-automatica'
 import { atualizarStatus, excluirTarefa } from './actions'
 import { BotaoExcluirTarefa } from './botao-excluir-tarefa'
 import { LinhaTarefa, type DetalhesTarefa } from './linha-tarefa'
+import { FiltroForm } from './filtro-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -260,7 +261,7 @@ export default async function TarefasPage({
         </div>
       </div>
 
-      <form action="/tarefas" className="flex flex-wrap items-center gap-2">
+      <FiltroForm action="/tarefas" className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="filtro" value={filtro} />
         {esteMs && <input type="hidden" name="mes" value={mes} />}
         {soHoje && <input type="hidden" name="hoje" value="1" />}
@@ -309,7 +310,7 @@ export default async function TarefasPage({
             Limpar
           </Link>
         )}
-      </form>
+      </FiltroForm>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         {tarefas.length === 0 ? (
