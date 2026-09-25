@@ -55,8 +55,9 @@ export async function testarWhatsapp(formData: FormData) {
     redirect('/config?erro=Preencha+e+salve+a+URL+da+inst%C3%A2ncia+antes+de+testar.')
   }
 
+  let respostaProvedor = ''
   try {
-    await enviarWhatsApp(
+    respostaProvedor = await enviarWhatsApp(
       config,
       telefone,
       `Teste do Painel de Tarefas (${usuario.empresa_nome}): se você recebeu esta mensagem, a notificação por WhatsApp está funcionando. ✅`
@@ -65,5 +66,9 @@ export async function testarWhatsapp(formData: FormData) {
     redirect(`/config?erro=${encodeURIComponent(`Falha ao enviar: ${e instanceof Error ? e.message : String(e)}`)}`)
   }
 
-  redirect(`/config?aviso=${encodeURIComponent(`Mensagem de teste enviada para ${telefone}.`)}`)
+  redirect(
+    `/config?aviso=${encodeURIComponent(
+      `Provedor aceitou o envio para ${telefone}. Resposta: ${respostaProvedor || '(vazia)'} — se mesmo assim não chegar no WhatsApp, confira se a instância está conectada no painel do provedor.`
+    )}`
+  )
 }

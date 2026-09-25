@@ -54,9 +54,21 @@ async function enviarWhatsApp(
     headers,
     body: JSON.stringify({ phone: telefone, message: mensagem }),
   })
+  const corpo = await resp.text().catch(() => '')
   if (!resp.ok) {
-    const corpo = await resp.text().catch(() => '')
     throw new Error(`provedor respondeu ${resp.status}: ${corpo.slice(0, 200)}`)
+  }
+
+  // Alguns gateways devolvem HTTP 200 mesmo em erro (ex.: instância
+  // desconectada) — o problema aparece só dentro do corpo da resposta.
+  try {
+    const json = JSON.parse(corpo)
+    const possivelErro = json?.error ?? json?.message ?? (json?.value === false ? json : null)
+    if (possivelErro) {
+      throw new Error(`provedor aceitou mas indicou erro: ${JSON.stringify(possivelErro).slice(0, 200)}`)
+    }
+  } catch (e) {
+    if (!(e instanceof SyntaxError)) throw e
   }
 }
 

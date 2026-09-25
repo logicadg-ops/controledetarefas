@@ -23,8 +23,13 @@ export interface ConfigZapi {
   zapi_client_token: string | null
 }
 
-/** Envia uma mensagem de texto. Lança erro com uma mensagem legível em caso de falha. */
-export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, mensagem: string): Promise<void> {
+/**
+ * Envia uma mensagem de texto. Lança erro com uma mensagem legível em caso de
+ * falha — inclusive quando o provedor responde HTTP 200 mas com um corpo que
+ * indica erro (comum em gateways não-oficiais, ex.: instância desconectada).
+ * Em caso de sucesso, devolve a resposta bruta do provedor (para conferência).
+ */
+export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, mensagem: string): Promise<string> {
   const instanceUrl = (config.zapi_instance_url || '').trim().replace(/\/+$/, '')
   if (!instanceUrl) throw new Error('URL da instância não configurada.')
 
@@ -40,8 +45,27 @@ export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, 
     body: JSON.stringify({ phone: telefone, message: mensagem }),
   })
 
+  const corpo = await resp.text().catch(() => '')
+
   if (!resp.ok) {
-    const corpo = await resp.text().catch(() => '')
     throw new Error(`Provedor respondeu ${resp.status}: ${corpo.slice(0, 300) || resp.statusText}`)
   }
+
+  // Alguns gateways devolvem HTTP 200 mesmo em erro (ex.: instância
+  // desconectada) — o problema aparece só dentro do corpo da resposta.
+  try {
+    const json = JSON.parse(corpo)
+    const possivelErro = json?.error ?? json?.message ?? (json?.value === false ? json : null)
+    if (possivelErro) {
+      throw new Error(`Provedor aceitou a requisição, mas indicou erro: ${JSON.stringify(possivelErro).slice(0, 300)}`)
+    }
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      // corpo não é JSON — segue como sucesso, mas devolve o texto bruto.
+    } else {
+      throw e
+    }
+  }
+
+  return corpo.slice(0, 500)
 }
