@@ -115,6 +115,8 @@ export interface ConfigGeral {
   webhook_url: string
   antecedencia_horas: number
   notificar_whatsapp: boolean
+  zapi_instance_url: string | null
+  zapi_client_token: string | null
   updated_at: string
 }
 

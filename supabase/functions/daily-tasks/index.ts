@@ -4,8 +4,13 @@
 // 1) Na virada do dia/semana/mês, recria as tarefas das recorrências ativas
 //    (função SQL gerar_tarefas_recorrentes; no cadastro a interface já gera
 //    a primeira). É idempotente: rodar mais de uma vez não duplica.
-// 2) Se notificar_whatsapp estiver ligado, envia um POST para webhook_url
-//    com as tarefas atrasadas e as que vencem dentro de "antecedencia_horas".
+// 2) Se notificar_whatsapp estiver ligado, para cada empresa:
+//    a) manda uma mensagem no WhatsApp de cada responsável (usuarios.whatsapp),
+//       via Z-API (ou serviço equivalente), com as tarefas atrasadas e as que
+//       vencem dentro de "antecedencia_horas" — tarefas de setor inteiro
+//       avisam todo mundo ativo do setor;
+//    b) se "webhook_url" estiver preenchido, também posta o payload bruto lá
+//       (uso opcional, ex.: fluxo próprio no n8n/Make).
 //
 // Deploy:  supabase functions deploy daily-tasks
 // Agendar: supabase functions schedule daily-tasks --cron "0 9 * * *"
@@ -17,6 +22,85 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+// URL pública do app, só para o link no fim da mensagem (opcional).
+const SITE_URL = Deno.env.get('SITE_URL') ?? ''
+
+// ----------------------------------------------------------------------------
+// WhatsApp (Z-API ou equivalente) — mantenha em sincronia com src/lib/whatsapp.ts
+// ----------------------------------------------------------------------------
+function normalizarTelefoneBr(bruto: string): string | null {
+  const digitos = bruto.replace(/\D/g, '')
+  if (digitos.length < 10) return null
+  if (digitos.startsWith('55') && (digitos.length === 12 || digitos.length === 13)) return digitos
+  if (digitos.length === 10 || digitos.length === 11) return `55${digitos}`
+  return digitos
+}
+
+async function enviarWhatsApp(
+  instanceUrlBruta: string,
+  clientToken: string | null,
+  telefoneBruto: string,
+  mensagem: string
+): Promise<void> {
+  const instanceUrl = instanceUrlBruta.trim().replace(/\/+$/, '')
+  const telefone = normalizarTelefoneBr(telefoneBruto)
+  if (!telefone) throw new Error(`telefone inválido "${telefoneBruto}"`)
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (clientToken) headers['Client-Token'] = clientToken
+
+  const resp = await fetch(`${instanceUrl}/send-text`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ phone: telefone, message: mensagem }),
+  })
+  if (!resp.ok) {
+    const corpo = await resp.text().catch(() => '')
+    throw new Error(`provedor respondeu ${resp.status}: ${corpo.slice(0, 200)}`)
+  }
+}
+
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const formatarDataHoraBrt = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
+
+interface UsuarioResumo {
+  id: string
+  nome: string
+  whatsapp: string | null
+  setor_id: string
+}
+
+interface TarefaAviso {
+  id: string
+  titulo: string
+  prazo: string
+  setor_id: string
+  responsavel_tipo: 'usuario' | 'setor'
+  responsavel_id: string | null
+}
+
+function montarMensagem(nome: string, atrasadas: TarefaAviso[], vencemHoje: TarefaAviso[], antecedenciaHoras: number) {
+  const primeiroNome = nome.split(' ')[0]
+  const linhas: string[] = [`Olá, ${primeiroNome}! 👋 Resumo das suas tarefas no Painel de Tarefas:`]
+
+  const listar = (tarefas: TarefaAviso[]) =>
+    tarefas
+      .slice(0, 10)
+      .map((t) => `• ${t.titulo} — prazo ${formatarDataHoraBrt(t.prazo)}`)
+      .join('\n') + (tarefas.length > 10 ? `\n• …e mais ${tarefas.length - 10}.` : '')
+
+  if (atrasadas.length > 0) {
+    linhas.push('', `⚠️ Atrasadas (${atrasadas.length}):`, listar(atrasadas))
+  }
+  if (vencemHoje.length > 0) {
+    linhas.push('', `⏰ Vencem nas próximas ${antecedenciaHoras}h (${vencemHoje.length}):`, listar(vencemHoje))
+  }
+  if (SITE_URL) linhas.push('', `Acesse: ${SITE_URL}/tarefas`)
+
+  return linhas.join('\n')
+}
 
 Deno.serve(async () => {
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
@@ -33,16 +117,19 @@ Deno.serve(async () => {
   }
 
   // ------------------------------------------------------------------------
-  // 2) Notificações (atrasadas + que vencem hoje) via webhook — uma vez por
-  //    empresa, cada uma com a sua configuração e só com as suas tarefas.
+  // 2) Notificações — uma vez por empresa, cada uma com a própria config e
+  //    só com as próprias tarefas.
   // ------------------------------------------------------------------------
   const { data: empresas } = await supabase.from('empresas').select('id, nome').eq('ativa', true)
   const { data: configs } = await supabase.from('config_geral').select('*')
 
-  let notificadas = 0
+  let empresasComAviso = 0
+  let mensagensEnviadas = 0
+  let mensagensComFalha = 0
+
   for (const empresa of empresas ?? []) {
     const config = (configs ?? []).find((c) => c.empresa_id === empresa.id)
-    if (!config?.notificar_whatsapp || !config?.webhook_url) continue
+    if (!config?.notificar_whatsapp) continue
 
     const limite = new Date(agora.getTime() + (config.antecedencia_horas ?? 24) * 60 * 60 * 1000)
 
@@ -53,29 +140,78 @@ Deno.serve(async () => {
       .in('status', ['pendente', 'andamento'])
       .lte('prazo', limite.toISOString())
 
-    const atrasadas = (tarefas ?? []).filter((t) => new Date(t.prazo).getTime() < agora.getTime())
-    const vencemHoje = (tarefas ?? []).filter((t) => new Date(t.prazo).getTime() >= agora.getTime())
+    const atrasadas = ((tarefas ?? []) as TarefaAviso[]).filter((t) => new Date(t.prazo).getTime() < agora.getTime())
+    const vencemHoje = ((tarefas ?? []) as TarefaAviso[]).filter((t) => new Date(t.prazo).getTime() >= agora.getTime())
 
-    if (atrasadas.length > 0 || vencemHoje.length > 0) {
+    if (atrasadas.length === 0 && vencemHoje.length === 0) continue
+    empresasComAviso++
+
+    // 2a) Webhook bruto, opcional (comportamento de sempre, inalterado).
+    if (config.webhook_url) {
       try {
         await fetch(config.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            empresa: { id: empresa.id, nome: empresa.nome },
-            atrasadas,
-            vencemHoje,
-            geradoEm: agora.toISOString(),
-          }),
+          body: JSON.stringify({ empresa: { id: empresa.id, nome: empresa.nome }, atrasadas, vencemHoje, geradoEm: agora.toISOString() }),
         })
-        notificadas++
       } catch (e) {
         console.error(`Falha ao chamar webhook da empresa ${empresa.nome}:`, e)
       }
     }
+
+    // 2b) WhatsApp direto para cada responsável.
+    if (!config.zapi_instance_url) continue
+
+    const { data: usuariosData } = await supabase
+      .from('usuarios')
+      .select('id, nome, whatsapp, setor_id')
+      .eq('empresa_id', empresa.id)
+      .eq('ativo', true)
+    const usuarios: UsuarioResumo[] = usuariosData ?? []
+
+    const usuarioPorId = new Map(usuarios.map((u) => [u.id, u]))
+    const usuariosPorSetor = new Map<string, UsuarioResumo[]>()
+    for (const u of usuarios) {
+      const lista = usuariosPorSetor.get(u.setor_id) ?? []
+      lista.push(u)
+      usuariosPorSetor.set(u.setor_id, lista)
+    }
+
+    // Agrupa as tarefas de cada pessoa (tarefa de setor avisa todo mundo ativo do setor).
+    const tarefasPorUsuario = new Map<string, { atrasadas: TarefaAviso[]; vencemHoje: TarefaAviso[] }>()
+    const adicionar = (usuarioId: string, tarefa: TarefaAviso, atrasada: boolean) => {
+      const grupo = tarefasPorUsuario.get(usuarioId) ?? { atrasadas: [], vencemHoje: [] }
+      ;(atrasada ? grupo.atrasadas : grupo.vencemHoje).push(tarefa)
+      tarefasPorUsuario.set(usuarioId, grupo)
+    }
+    for (const t of [...atrasadas.map((t) => [t, true] as const), ...vencemHoje.map((t) => [t, false] as const)]) {
+      const [tarefa, atrasada] = t
+      if (tarefa.responsavel_tipo === 'usuario' && tarefa.responsavel_id) {
+        adicionar(tarefa.responsavel_id, tarefa, atrasada)
+      } else if (tarefa.responsavel_tipo === 'setor') {
+        for (const u of usuariosPorSetor.get(tarefa.setor_id) ?? []) adicionar(u.id, tarefa, atrasada)
+      }
+    }
+
+    for (const [usuarioId, grupo] of tarefasPorUsuario) {
+      const usuario = usuarioPorId.get(usuarioId)
+      if (!usuario?.whatsapp) continue
+
+      const mensagem = montarMensagem(usuario.nome, grupo.atrasadas, grupo.vencemHoje, config.antecedencia_horas ?? 24)
+      try {
+        await enviarWhatsApp(config.zapi_instance_url, config.zapi_client_token, usuario.whatsapp, mensagem)
+        mensagensEnviadas++
+      } catch (e) {
+        mensagensComFalha++
+        console.error(`Falha ao enviar WhatsApp para ${usuario.nome} (${empresa.nome}):`, e)
+      }
+      // Espaça os envios para não soar como disparo em massa ao provedor.
+      await espera(1500)
+    }
   }
 
-  return new Response(JSON.stringify({ geradas, empresasNotificadas: notificadas }), {
-    headers: { 'Content-Type': 'application/json' },
-  })
+  return new Response(
+    JSON.stringify({ geradas, empresasComAviso, mensagensEnviadas, mensagensComFalha }),
+    { headers: { 'Content-Type': 'application/json' } }
+  )
 })
