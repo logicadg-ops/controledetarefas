@@ -24,13 +24,26 @@ export interface ConfigZapi {
 }
 
 /**
+ * Monta a URL de envio a partir do que foi salvo — aceita tanto a URL base
+ * da instância (ex.: .../token/XXXX) quanto a URL completa já com
+ * "/send-text" no final (é o que muitos painéis de provedor mostram como
+ * exemplo, e é comum colarem ela inteira). Sem isso, colar a URL completa
+ * faz o sistema chamar ".../send-text/send-text", que não existe.
+ */
+function montarUrlSendText(bruta: string | null): string | null {
+  const semBarraFinal = (bruta || '').trim().replace(/\/+$/, '')
+  if (!semBarraFinal) return null
+  return /\/send-text$/i.test(semBarraFinal) ? semBarraFinal : `${semBarraFinal}/send-text`
+}
+
+/**
  * Envia uma mensagem de texto. Lança erro com uma mensagem legível em caso de
  * falha — inclusive quando o provedor responde HTTP 200 mas com um corpo que
  * indica erro (comum em gateways não-oficiais, ex.: instância desconectada).
  * Em caso de sucesso, devolve a resposta bruta do provedor (para conferência).
  */
 export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, mensagem: string): Promise<string> {
-  const instanceUrl = (config.zapi_instance_url || '').trim().replace(/\/+$/, '')
+  const instanceUrl = montarUrlSendText(config.zapi_instance_url)
   if (!instanceUrl) throw new Error('URL da instância não configurada.')
 
   const telefone = normalizarTelefoneBr(telefoneBruto)
@@ -39,7 +52,7 @@ export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (config.zapi_client_token) headers['Client-Token'] = config.zapi_client_token
 
-  const resp = await fetch(`${instanceUrl}/send-text`, {
+  const resp = await fetch(instanceUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({ phone: telefone, message: mensagem }),

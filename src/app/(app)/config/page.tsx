@@ -67,6 +67,9 @@ export default async function ConfigPage({
               placeholder="https://api.z-api.io/instances/SEU_ID/token/SEU_TOKEN"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
             />
+            <p className="mt-1 text-xs text-slate-400">
+              Com ou sem &ldquo;/send-text&rdquo; no final — o sistema completa sozinho se faltar.
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600">

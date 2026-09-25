@@ -36,20 +36,28 @@ function normalizarTelefoneBr(bruto: string): string | null {
   return digitos
 }
 
+// Aceita tanto a URL base da instância quanto a URL já com "/send-text" no
+// final (muitos painéis de provedor mostram essa como exemplo, e é comum
+// colarem ela inteira) — sem isso, ficaria ".../send-text/send-text".
+function montarUrlSendText(bruta: string): string {
+  const semBarraFinal = bruta.trim().replace(/\/+$/, '')
+  return /\/send-text$/i.test(semBarraFinal) ? semBarraFinal : `${semBarraFinal}/send-text`
+}
+
 async function enviarWhatsApp(
   instanceUrlBruta: string,
   clientToken: string | null,
   telefoneBruto: string,
   mensagem: string
 ): Promise<void> {
-  const instanceUrl = instanceUrlBruta.trim().replace(/\/+$/, '')
+  const instanceUrl = montarUrlSendText(instanceUrlBruta)
   const telefone = normalizarTelefoneBr(telefoneBruto)
   if (!telefone) throw new Error(`telefone inválido "${telefoneBruto}"`)
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (clientToken) headers['Client-Token'] = clientToken
 
-  const resp = await fetch(`${instanceUrl}/send-text`, {
+  const resp = await fetch(instanceUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({ phone: telefone, message: mensagem }),
