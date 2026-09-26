@@ -82,3 +82,36 @@ export async function enviarWhatsApp(config: ConfigZapi, telefoneBruto: string, 
 
   return corpo.slice(0, 500)
 }
+
+export interface TarefaParaAviso {
+  titulo: string
+  prazo: string
+  clienteNome: string | null
+}
+
+/**
+ * Monta a mensagem do disparo manual (aviso avulso sobre tarefas escolhidas
+ * pelo admin, diferente do resumo diário automático). Mesmo estilo visual do
+ * resumo diário: uma linha em branco entre tarefas, cliente entre parênteses
+ * quando houver, e "atrasada" quando o prazo já passou.
+ */
+export function montarMensagemManual(nome: string, tarefas: TarefaParaAviso[], siteUrl: string): string {
+  const primeiroNome = nome.split(' ')[0]
+  const agora = Date.now()
+  const formatarDataHoraBrt = (iso: string) =>
+    new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
+
+  const linhas: string[] = [
+    `Olá, ${primeiroNome}! 👋 Aviso sobre ${tarefas.length === 1 ? 'uma tarefa sua' : `${tarefas.length} tarefas suas`} no Painel de Tarefas:`,
+    '',
+    tarefas
+      .map((t) => {
+        const atrasada = new Date(t.prazo).getTime() < agora
+        return `• ${t.titulo}${t.clienteNome ? ` (cliente: ${t.clienteNome})` : ''}\n  prazo ${formatarDataHoraBrt(t.prazo)}${atrasada ? ' ⚠️ atrasada' : ''}`
+      })
+      .join('\n\n'),
+  ]
+  if (siteUrl) linhas.push('', `Acesse: ${siteUrl}/tarefas`)
+
+  return linhas.join('\n')
+}

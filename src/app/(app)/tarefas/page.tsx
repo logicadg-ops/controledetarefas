@@ -18,6 +18,8 @@ import {
 import { AtualizacaoAutomatica } from '../atualizacao-automatica'
 import { atualizarStatus, excluirTarefa } from './actions'
 import { BotaoExcluirTarefa } from './botao-excluir-tarefa'
+import { FormNotificar } from './form-notificar'
+import { SelecionarTodas } from './selecionar-todas'
 import { LinhaTarefa, type DetalhesTarefa } from './linha-tarefa'
 import { FiltroForm } from './filtro-form'
 
@@ -312,6 +314,8 @@ export default async function TarefasPage({
         )}
       </FiltroForm>
 
+      {isAdmin && <FormNotificar />}
+
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         {tarefas.length === 0 ? (
           <p className="p-8 text-center text-sm text-slate-400">Nenhuma tarefa encontrada.</p>
@@ -319,6 +323,11 @@ export default async function TarefasPage({
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-left text-xs uppercase text-slate-500">
               <tr>
+                {isAdmin && (
+                  <th className="px-4 py-2.5 font-medium">
+                    <SelecionarTodas />
+                  </th>
+                )}
                 <th className="px-4 py-2.5 font-medium">Tarefa</th>
                 <th className="px-4 py-2.5 font-medium">Cliente</th>
                 <th className="px-4 py-2.5 font-medium">Setor</th>
@@ -334,6 +343,13 @@ export default async function TarefasPage({
             <tbody className="divide-y divide-slate-100">
               {tarefas.map((t) => (
                 <LinhaTarefa key={t.id} detalhes={detalhesDe(t)} className={isAtrasada(t) ? 'bg-red-50/40' : undefined}>
+                  {isAdmin && (
+                    <td className="px-4 py-2.5">
+                      {(t.status === 'pendente' || t.status === 'andamento') && (
+                        <input type="checkbox" name="tarefa_ids" value={t.id} form="notificar-selecionadas" />
+                      )}
+                    </td>
+                  )}
                   <td className="min-w-[10rem] px-4 py-2.5">
                     <p className="flex items-center gap-1.5 font-medium text-slate-900">
                       {t.titulo}

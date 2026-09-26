@@ -6,6 +6,7 @@ import { getUsuarioLogado } from '@/lib/data'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { ResponsavelTipo, StatusTarefa } from '@/lib/types'
+import { enviarWhatsApp, montarMensagemManual, type TarefaParaAviso } from '@/lib/whatsapp'
 
 const BUCKET_ANEXOS = 'tarefa-anexos'
 
@@ -217,4 +218,108 @@ export async function salvarDevolutiva(tarefaId: string, formData: FormData) {
   }
 
   revalidatePath('/tarefas')
+}
+
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// Aviso manual e avulso, só das tarefas marcadas na caixa de seleção — não
+// mexe no resumo diário automático. Admin only. Tarefa de setor inteiro
+// avisa todo mundo ativo do setor (mesma regra do resumo diário).
+export async function notificarTarefasSelecionadas(formData: FormData) {
+  'use server'
+  const usuario = await getUsuarioLogado()
+  if (usuario?.role !== 'admin') throw new Error('Apenas administradores podem notificar manualmente.')
+
+  const ids = formData.getAll('tarefa_ids').map(String).filter(Boolean)
+  if (ids.length === 0) {
+    redirect('/tarefas?erro=Selecione+ao+menos+uma+tarefa+para+notificar.')
+  }
+
+  const supabase = await createClient()
+
+  const { data: config } = await supabase
+    .from('config_geral')
+    .select('zapi_instance_url, zapi_client_token')
+    .eq('empresa_id', usuario.empresa_id)
+    .single()
+
+  if (!config?.zapi_instance_url) {
+    redirect('/tarefas?erro=Configure+o+WhatsApp+em+Configura%C3%A7%C3%B5es+antes+de+notificar.')
+  }
+
+  const { data: tarefasData } = await supabase
+    .from('tarefas')
+    .select('id, titulo, prazo, setor_id, responsavel_tipo, responsavel_id, clientes(nome)')
+    .in('id', ids)
+
+  const tarefas = (tarefasData ?? []) as unknown as {
+    id: string
+    titulo: string
+    prazo: string
+    setor_id: string
+    responsavel_tipo: ResponsavelTipo
+    responsavel_id: string | null
+    clientes: { nome: string } | null
+  }[]
+
+  if (tarefas.length === 0) {
+    redirect('/tarefas?erro=Nenhuma+das+tarefas+selecionadas+foi+encontrada.')
+  }
+
+  const { data: usuariosData } = await supabase
+    .from('usuarios')
+    .select('id, nome, whatsapp, setor_id')
+    .eq('empresa_id', usuario.empresa_id)
+    .eq('ativo', true)
+  const usuarios = usuariosData ?? []
+  const usuarioPorId = new Map(usuarios.map((u) => [u.id, u]))
+  const usuariosPorSetor = new Map<string, typeof usuarios>()
+  for (const u of usuarios) {
+    const lista = usuariosPorSetor.get(u.setor_id) ?? []
+    lista.push(u)
+    usuariosPorSetor.set(u.setor_id, lista)
+  }
+
+  // Agrupa as tarefas selecionadas por quem deve ser avisado.
+  const tarefasPorUsuario = new Map<string, TarefaParaAviso[]>()
+  const adicionar = (usuarioId: string, tarefa: (typeof tarefas)[number]) => {
+    const lista = tarefasPorUsuario.get(usuarioId) ?? []
+    lista.push({ titulo: tarefa.titulo, prazo: tarefa.prazo, clienteNome: tarefa.clientes?.nome ?? null })
+    tarefasPorUsuario.set(usuarioId, lista)
+  }
+  for (const t of tarefas) {
+    if (t.responsavel_tipo === 'usuario' && t.responsavel_id) {
+      adicionar(t.responsavel_id, t)
+    } else if (t.responsavel_tipo === 'setor') {
+      for (const u of usuariosPorSetor.get(t.setor_id) ?? []) adicionar(u.id, t)
+    }
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
+  let enviadas = 0
+  let semWhatsapp = 0
+  const falhas: string[] = []
+
+  for (const [usuarioId, tarefasDaPessoa] of Array.from(tarefasPorUsuario)) {
+    const pessoa = usuarioPorId.get(usuarioId)
+    if (!pessoa?.whatsapp) {
+      semWhatsapp++
+      continue
+    }
+    try {
+      const mensagem = montarMensagemManual(pessoa.nome, tarefasDaPessoa, siteUrl)
+      await enviarWhatsApp(config, pessoa.whatsapp, mensagem)
+      enviadas++
+    } catch {
+      falhas.push(pessoa.nome)
+    }
+    await espera(1500)
+  }
+
+  const partes = [`${enviadas} ${enviadas === 1 ? 'notificação enviada' : 'notificações enviadas'}.`]
+  if (falhas.length > 0) partes.push(`Falhou para: ${falhas.join(', ')}.`)
+  if (semWhatsapp > 0) partes.push(`${semWhatsapp} responsável(is) sem WhatsApp cadastrado.`)
+
+  revalidatePath('/tarefas')
+  redirect(`/tarefas?aviso=${encodeURIComponent(partes.join(' '))}`)
 }
