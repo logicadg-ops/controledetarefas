@@ -97,6 +97,7 @@ interface TarefaAviso {
   titulo: string
   prazo: string
   setor_id: string
+  cliente_id: string | null
   responsavel_tipo: 'usuario' | 'setor'
   responsavel_id: string | null
 }
@@ -110,15 +111,26 @@ function formatarAntecedencia(minutosTotais: number): string {
   return `${h}h${String(m).padStart(2, '0')}`
 }
 
-function montarMensagem(nome: string, atrasadas: TarefaAviso[], vencemHoje: TarefaAviso[], antecedenciaMinutos: number) {
+function montarMensagem(
+  nome: string,
+  atrasadas: TarefaAviso[],
+  vencemHoje: TarefaAviso[],
+  antecedenciaMinutos: number,
+  clientePorId: Map<string, string>
+) {
   const primeiroNome = nome.split(' ')[0]
   const linhas: string[] = [`Olá, ${primeiroNome}! 👋 Resumo das suas tarefas no Painel de Tarefas:`]
 
-  const listar = (tarefas: TarefaAviso[]) =>
-    tarefas
-      .slice(0, 10)
-      .map((t) => `• ${t.titulo} — prazo ${formatarDataHoraBrt(t.prazo)}`)
-      .join('\n') + (tarefas.length > 10 ? `\n• …e mais ${tarefas.length - 10}.` : '')
+  const linhaTarefa = (t: TarefaAviso) => {
+    const cliente = t.cliente_id ? clientePorId.get(t.cliente_id) : null
+    return `• ${t.titulo}${cliente ? ` (cliente: ${cliente})` : ''}\n  prazo ${formatarDataHoraBrt(t.prazo)}`
+  }
+
+  const listar = (tarefas: TarefaAviso[]) => {
+    const linhasDaLista = tarefas.slice(0, 10).map(linhaTarefa)
+    if (tarefas.length > 10) linhasDaLista.push(`• …e mais ${tarefas.length - 10}.`)
+    return linhasDaLista.join('\n\n')
+  }
 
   if (atrasadas.length > 0) {
     linhas.push('', `⚠️ Atrasadas (${atrasadas.length}):`, listar(atrasadas))
@@ -169,7 +181,7 @@ Deno.serve(async () => {
 
     const { data: tarefas } = await supabase
       .from('tarefas')
-      .select('id, titulo, prazo, setor_id, responsavel_tipo, responsavel_id, status')
+      .select('id, titulo, prazo, setor_id, cliente_id, responsavel_tipo, responsavel_id, status')
       .eq('empresa_id', empresa.id)
       .in('status', ['pendente', 'andamento'])
       .lte('prazo', limite.toISOString())
@@ -203,6 +215,9 @@ Deno.serve(async () => {
       .eq('ativo', true)
     const usuarios: UsuarioResumo[] = usuariosData ?? []
 
+    const { data: clientesData } = await supabase.from('clientes').select('id, nome').eq('empresa_id', empresa.id)
+    const clientePorId = new Map((clientesData ?? []).map((c) => [c.id, c.nome] as const))
+
     const usuarioPorId = new Map(usuarios.map((u) => [u.id, u]))
     const usuariosPorSetor = new Map<string, UsuarioResumo[]>()
     for (const u of usuarios) {
@@ -231,7 +246,7 @@ Deno.serve(async () => {
       const usuario = usuarioPorId.get(usuarioId)
       if (!usuario?.whatsapp) continue
 
-      const mensagem = montarMensagem(usuario.nome, grupo.atrasadas, grupo.vencemHoje, antecedenciaMinutos)
+      const mensagem = montarMensagem(usuario.nome, grupo.atrasadas, grupo.vencemHoje, antecedenciaMinutos, clientePorId)
       try {
         await enviarWhatsApp(config.zapi_instance_url, config.zapi_client_token, usuario.whatsapp, mensagem)
         mensagensEnviadas++
