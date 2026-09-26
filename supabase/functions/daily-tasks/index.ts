@@ -7,7 +7,7 @@
 // 2) Se notificar_whatsapp estiver ligado, para cada empresa:
 //    a) manda uma mensagem no WhatsApp de cada responsável (usuarios.whatsapp),
 //       via Z-API (ou serviço equivalente), com as tarefas atrasadas e as que
-//       vencem dentro de "antecedencia_horas" — tarefas de setor inteiro
+//       vencem dentro de "antecedencia_horas"+"antecedencia_minutos" — tarefas de setor inteiro
 //       avisam todo mundo ativo do setor;
 //    b) se "webhook_url" estiver preenchido, também posta o payload bruto lá
 //       (uso opcional, ex.: fluxo próprio no n8n/Make).
@@ -101,7 +101,16 @@ interface TarefaAviso {
   responsavel_id: string | null
 }
 
-function montarMensagem(nome: string, atrasadas: TarefaAviso[], vencemHoje: TarefaAviso[], antecedenciaHoras: number) {
+// Ex.: 90 -> "1h30", 120 -> "2h", 30 -> "30min".
+function formatarAntecedencia(minutosTotais: number): string {
+  const h = Math.floor(minutosTotais / 60)
+  const m = minutosTotais % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h${String(m).padStart(2, '0')}`
+}
+
+function montarMensagem(nome: string, atrasadas: TarefaAviso[], vencemHoje: TarefaAviso[], antecedenciaMinutos: number) {
   const primeiroNome = nome.split(' ')[0]
   const linhas: string[] = [`Olá, ${primeiroNome}! 👋 Resumo das suas tarefas no Painel de Tarefas:`]
 
@@ -115,7 +124,11 @@ function montarMensagem(nome: string, atrasadas: TarefaAviso[], vencemHoje: Tare
     linhas.push('', `⚠️ Atrasadas (${atrasadas.length}):`, listar(atrasadas))
   }
   if (vencemHoje.length > 0) {
-    linhas.push('', `⏰ Vencem nas próximas ${antecedenciaHoras}h (${vencemHoje.length}):`, listar(vencemHoje))
+    linhas.push(
+      '',
+      `⏰ Vencem nas próximas ${formatarAntecedencia(antecedenciaMinutos)} (${vencemHoje.length}):`,
+      listar(vencemHoje)
+    )
   }
   if (SITE_URL) linhas.push('', `Acesse: ${SITE_URL}/tarefas`)
 
@@ -151,7 +164,8 @@ Deno.serve(async () => {
     const config = (configs ?? []).find((c) => c.empresa_id === empresa.id)
     if (!config?.notificar_whatsapp) continue
 
-    const limite = new Date(agora.getTime() + (config.antecedencia_horas ?? 24) * 60 * 60 * 1000)
+    const antecedenciaMinutos = (config.antecedencia_horas ?? 24) * 60 + (config.antecedencia_minutos ?? 0)
+    const limite = new Date(agora.getTime() + antecedenciaMinutos * 60 * 1000)
 
     const { data: tarefas } = await supabase
       .from('tarefas')
@@ -217,7 +231,7 @@ Deno.serve(async () => {
       const usuario = usuarioPorId.get(usuarioId)
       if (!usuario?.whatsapp) continue
 
-      const mensagem = montarMensagem(usuario.nome, grupo.atrasadas, grupo.vencemHoje, config.antecedencia_horas ?? 24)
+      const mensagem = montarMensagem(usuario.nome, grupo.atrasadas, grupo.vencemHoje, antecedenciaMinutos)
       try {
         await enviarWhatsApp(config.zapi_instance_url, config.zapi_client_token, usuario.whatsapp, mensagem)
         mensagensEnviadas++

@@ -114,6 +114,7 @@ export interface ConfigGeral {
   empresa_id: string
   webhook_url: string
   antecedencia_horas: number
+  antecedencia_minutos: number
   notificar_whatsapp: boolean
   zapi_instance_url: string | null
   zapi_client_token: string | null

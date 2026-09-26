@@ -33,16 +33,32 @@ export default async function ConfigPage({
 
       <form action={salvarConfig} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
         <div>
-          <label className="block text-sm font-medium text-slate-700">Antecedência (horas)</label>
-          <input
-            name="antecedencia_horas"
-            type="number"
-            min={1}
-            defaultValue={config?.antecedencia_horas}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
-          />
+          <label className="block text-sm font-medium text-slate-700">Antecedência</label>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              name="antecedencia_horas"
+              type="number"
+              min={0}
+              defaultValue={config?.antecedencia_horas}
+              aria-label="Horas de antecedência"
+              className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <span className="text-sm text-slate-500">h</span>
+            <input
+              name="antecedencia_minutos"
+              type="number"
+              min={0}
+              max={59}
+              defaultValue={config?.antecedencia_minutos ?? 0}
+              aria-label="Minutos de antecedência"
+              className="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none"
+            />
+            <span className="text-sm text-slate-500">min</span>
+          </div>
           <p className="mt-1 text-xs text-slate-400">
-            Quantas horas antes do prazo a tarefa entra no aviso de &ldquo;vence hoje&rdquo;.
+            Quanto tempo antes do prazo a tarefa entra no aviso de &ldquo;vence em breve&rdquo; — dá para
+            usar só minutos (ex.: 0h 30min) para um aviso mais próximo da hora, ou somar horas e dias
+            (ex.: 48h) para avisar com mais folga.
           </p>
         </div>
 

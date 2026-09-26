@@ -11,10 +11,15 @@ export async function salvarConfig(formData: FormData) {
   if (usuario?.role !== 'admin') throw new Error('Apenas administradores podem fazer isso.')
 
   const webhookUrl = String(formData.get('webhook_url') || '').trim()
-  const antecedenciaHoras = Number(formData.get('antecedencia_horas') || 24)
+  const antecedenciaHoras = Math.max(0, Number(formData.get('antecedencia_horas') || 0))
+  const antecedenciaMinutos = Math.min(59, Math.max(0, Number(formData.get('antecedencia_minutos') || 0)))
   const notificarWhatsapp = formData.get('notificar_whatsapp') === 'on'
   const zapiInstanceUrl = String(formData.get('zapi_instance_url') || '').trim() || null
   const zapiClientToken = String(formData.get('zapi_client_token') || '').trim() || null
+
+  if (antecedenciaHoras === 0 && antecedenciaMinutos === 0) {
+    redirect('/config?erro=A+antecedência+precisa+ser+maior+que+zero.')
+  }
 
   const supabase = await createClient()
   await supabase
@@ -22,6 +27,7 @@ export async function salvarConfig(formData: FormData) {
     .update({
       webhook_url: webhookUrl,
       antecedencia_horas: antecedenciaHoras,
+      antecedencia_minutos: antecedenciaMinutos,
       notificar_whatsapp: notificarWhatsapp,
       zapi_instance_url: zapiInstanceUrl,
       zapi_client_token: zapiClientToken,
