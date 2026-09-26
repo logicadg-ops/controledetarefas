@@ -18,6 +18,7 @@ export async function criarUsuario(formData: FormData) {
   const nome = String(formData.get('nome') || '').trim()
   const email = String(formData.get('email') || '').trim().toLowerCase()
   const cargo = String(formData.get('cargo') || '').trim()
+  const whatsapp = String(formData.get('whatsapp') || '').trim() || null
   const setorId = String(formData.get('setor_id') || '') || null
   const role = (String(formData.get('role') || 'comum')) as Role
 
@@ -32,6 +33,7 @@ export async function criarUsuario(formData: FormData) {
       nome,
       email,
       cargo,
+      whatsapp,
       setor_id: setorId,
       role,
     })
@@ -48,6 +50,34 @@ export async function criarUsuario(formData: FormData) {
     if (authUserId) {
       await createAdminClient().from('usuarios').update({ auth_user_id: authUserId }).eq('id', criado.id)
     }
+  }
+
+  revalidatePath('/usuarios')
+}
+
+// Não inclui e-mail: é a chave usada para ligar o convite/login (auth_user_id)
+// ao cadastro — trocá-lo depois de criado quebraria esse vínculo.
+export async function atualizarUsuario(id: string, formData: FormData) {
+  await assertAdmin()
+
+  const nome = String(formData.get('nome') || '').trim()
+  const cargo = String(formData.get('cargo') || '').trim()
+  const whatsapp = String(formData.get('whatsapp') || '').trim() || null
+  const setorId = String(formData.get('setor_id') || '') || null
+  const role = (String(formData.get('role') || 'comum')) as Role
+
+  if (!nome) {
+    redirect('/usuarios?erro=Preencha+o+nome.')
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('usuarios')
+    .update({ nome, cargo, whatsapp, setor_id: setorId, role })
+    .eq('id', id)
+
+  if (error) {
+    redirect(`/usuarios?erro=${encodeURIComponent(error.message)}`)
   }
 
   revalidatePath('/usuarios')
